@@ -18,3 +18,8 @@ mkdir -p ./out && g++ -O3 ./source/test_opencv.cpp -o ./out/test_opencv `pkg-con
 ```console
 nvcc -o median_filter median_filter.cu `pkg-config --cflags --libs opencv4`
 ```
+
+
+
+
+nvcc -O3 -o main main_cuda.cu `pkg-config --cflags --libs opencv4` && ./main image2.png out9.png 9

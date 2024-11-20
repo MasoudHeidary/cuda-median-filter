@@ -207,3 +207,127 @@ void gray_median_filter_cuda(const cv::Mat& inputImage, cv::Mat& outputImage, in
     cudaFree(d_outputImage);
 }
 
+int color_median_filter_cuda(const cv::Mat& inputImage, cv::Mat& outputImage, const int filterSize) {
+    if (inputImage.channels() != 3) {
+        // error code
+        return -1;
+    }
+
+    
+    const int width = inputImage.cols;
+    const int height = inputImage.rows;
+    const int imageSize = width * height;
+    const int channelSize = imageSize; // Size of a single channel
+
+    // Allocate memory for each channel
+    unsigned char *d_inputR, *d_inputG, *d_inputB;
+    unsigned char *d_outputR, *d_outputG, *d_outputB;
+
+    cudaMalloc(&d_inputR, channelSize);
+    cudaMalloc(&d_inputG, channelSize);
+    cudaMalloc(&d_inputB, channelSize);
+    cudaMalloc(&d_outputR, channelSize);
+    cudaMalloc(&d_outputG, channelSize);
+    cudaMalloc(&d_outputB, channelSize);
+
+    // Split the image into its respective channels
+    std::vector<cv::Mat> channels(3);
+    cv::split(inputImage, channels);
+
+    // Copy each channel to device memory
+    cudaMemcpy(d_inputR, channels[0].data, channelSize, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_inputG, channels[1].data, channelSize, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_inputB, channels[2].data, channelSize, cudaMemcpyHostToDevice);
+
+    // Kernel launch parameters
+    dim3 blockDim(BLOCK_SIZE, BLOCK_SIZE);
+    dim3 gridDim((width + BLOCK_SIZE - 1) / BLOCK_SIZE, (height + BLOCK_SIZE - 1) / BLOCK_SIZE);
+
+    size_t sharedMemSize = (BLOCK_SIZE + 2 * (filterSize / 2)) * (BLOCK_SIZE + 2 * (filterSize / 2)) * sizeof(unsigned char);
+
+    // Apply median filter to each channel
+    medianFilterKernel<<<gridDim, blockDim, sharedMemSize>>>(d_inputR, d_outputR, width, height, filterSize);
+    medianFilterKernel<<<gridDim, blockDim, sharedMemSize>>>(d_inputG, d_outputG, width, height, filterSize);
+    medianFilterKernel<<<gridDim, blockDim, sharedMemSize>>>(d_inputB, d_outputB, width, height, filterSize);
+
+    // Copy the filtered channels back to host memory
+    cudaMemcpy(channels[0].data, d_outputR, channelSize, cudaMemcpyDeviceToHost);
+    cudaMemcpy(channels[1].data, d_outputG, channelSize, cudaMemcpyDeviceToHost);
+    cudaMemcpy(channels[2].data, d_outputB, channelSize, cudaMemcpyDeviceToHost);
+
+    // Merge the filtered channels back into a single image
+    cv::merge(channels, outputImage);
+
+    // Free device memory
+    cudaFree(d_inputR);
+    cudaFree(d_inputG);
+    cudaFree(d_inputB);
+    cudaFree(d_outputR);
+    cudaFree(d_outputG);
+    cudaFree(d_outputB);
+
+    return 0;
+}
+
+
+
+
+// void color_median_filter_cuda(const cv::Mat& inputImage, cv::Mat& outputImage, int filterSize) {
+//     // Ensure input is a color image
+//     if (inputImage.channels() != 3) {
+//         std::cerr << "Input image is not a color image!" << std::endl;
+//         return;
+//     }
+
+//     const int width = inputImage.cols;
+//     const int height = inputImage.rows;
+//     const int imageSize = width * height;
+//     const int channelSize = imageSize; // Size of a single channel
+
+//     // Allocate memory for each channel
+//     unsigned char *d_inputR, *d_inputG, *d_inputB;
+//     unsigned char *d_outputR, *d_outputG, *d_outputB;
+
+//     cudaMalloc(&d_inputR, channelSize);
+//     cudaMalloc(&d_inputG, channelSize);
+//     cudaMalloc(&d_inputB, channelSize);
+//     cudaMalloc(&d_outputR, channelSize);
+//     cudaMalloc(&d_outputG, channelSize);
+//     cudaMalloc(&d_outputB, channelSize);
+
+//     // Split the image into its respective channels
+//     std::vector<cv::Mat> channels(3);
+//     cv::split(inputImage, channels);
+
+//     // Copy each channel to device memory
+//     cudaMemcpy(d_inputR, channels[0].data, channelSize, cudaMemcpyHostToDevice);
+//     cudaMemcpy(d_inputG, channels[1].data, channelSize, cudaMemcpyHostToDevice);
+//     cudaMemcpy(d_inputB, channels[2].data, channelSize, cudaMemcpyHostToDevice);
+
+//     // Kernel launch parameters
+//     dim3 blockDim(BLOCK_SIZE, BLOCK_SIZE);
+//     dim3 gridDim((width + BLOCK_SIZE - 1) / BLOCK_SIZE, (height + BLOCK_SIZE - 1) / BLOCK_SIZE);
+
+//     size_t sharedMemSize = (BLOCK_SIZE + 2 * (filterSize / 2)) * (BLOCK_SIZE + 2 * (filterSize / 2)) * sizeof(unsigned char);
+
+//     // Apply median filter to each channel
+//     medianFilterKernel<<<gridDim, blockDim, sharedMemSize>>>(d_inputR, d_outputR, width, height, filterSize);
+//     medianFilterKernel<<<gridDim, blockDim, sharedMemSize>>>(d_inputG, d_outputG, width, height, filterSize);
+//     medianFilterKernel<<<gridDim, blockDim, sharedMemSize>>>(d_inputB, d_outputB, width, height, filterSize);
+
+//     // Copy the filtered channels back to host memory
+//     cudaMemcpy(channels[0].data, d_outputR, channelSize, cudaMemcpyDeviceToHost);
+//     cudaMemcpy(channels[1].data, d_outputG, channelSize, cudaMemcpyDeviceToHost);
+//     cudaMemcpy(channels[2].data, d_outputB, channelSize, cudaMemcpyDeviceToHost);
+
+//     // Merge the filtered channels back into a single image
+//     cv::merge(channels, outputImage);
+
+//     // Free device memory
+//     cudaFree(d_inputR);
+//     cudaFree(d_inputG);
+//     cudaFree(d_inputB);
+//     cudaFree(d_outputR);
+//     cudaFree(d_outputG);
+//     cudaFree(d_outputB);
+// }
