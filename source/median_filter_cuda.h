@@ -6,7 +6,7 @@
 #include "func_image.h"
 
 #define FILTER_SIZE 3
-#define BLOCK_SIZE 16  // Adjust as needed
+#define BLOCK_SIZE 16 
 
 // bubble sort
 // __device__ void sortWindow(unsigned char* window, int size) {
@@ -27,8 +27,6 @@ __device__ void sortWindow(unsigned char* window, int size) {
         unsigned char key = window[i];
         int j = i - 1;
 
-        // Move elements of window[0..i-1], that are greater than key,
-        // one position ahead of their current position
         while (j >= 0 && window[j] > key) {
             window[j + 1] = window[j];
             j--;
@@ -36,6 +34,41 @@ __device__ void sortWindow(unsigned char* window, int size) {
         window[j + 1] = key;
     }
 }
+
+
+__device__ void parallelSort(unsigned char* window, int size, int threadIdx) {
+    for (int k = 2; k <= size; k *= 2) {
+        for (int j = k / 2; j > 0; j /= 2) {
+            int idx = threadIdx;
+
+            if (idx < size) {
+                int ixj = idx ^ j;
+
+                // Only compare and swap if within bounds and direction is valid
+                if (ixj > idx) {
+                    if ((idx & k) == 0) { // Ascending sort
+                        if (window[idx] > window[ixj]) {
+                            // Swap
+                            unsigned char temp = window[idx];
+                            window[idx] = window[ixj];
+                            window[ixj] = temp;
+                        }
+                    } else { // Descending sort
+                        if (window[idx] < window[ixj]) {
+                            // Swap
+                            unsigned char temp = window[idx];
+                            window[idx] = window[ixj];
+                            window[ixj] = temp;
+                        }
+                    }
+                }
+            }
+            __syncthreads(); // Synchronize threads in the block
+        }
+    }
+}
+
+
 
 // global memory access median filter
 // __global__ void medianFilterKernel(const unsigned char* inputImage, unsigned char* outputImage, int width, int height, int filterSize) {
@@ -93,29 +126,42 @@ __global__ void medianFilterKernel(const unsigned char* inputImage, unsigned cha
     // Load padding
     if (threadIdx.x < padSize) {
         // Left padding
-        int leftX = max(clampedX - padSize, 0);
+        int leftX = max(x - padSize, 0); // Clamp to the left edge
         sharedMem[sharedY * sharedWidth + threadIdx.x] = inputImage[clampedY * width + leftX];
 
         // Right padding
-        int rightX = min(clampedX + blockDim.x, width - 1);
+        int rightX = min(x + blockDim.x, width - 1); // Clamp to the right edge
         sharedMem[sharedY * sharedWidth + sharedX + blockDim.x] = inputImage[clampedY * width + rightX];
     }
 
     if (threadIdx.y < padSize) {
         // Top padding
-        int topY = max(clampedY - padSize, 0);
+        int topY = max(y - padSize, 0); // Clamp to the top edge
         sharedMem[threadIdx.y * sharedWidth + sharedX] = inputImage[topY * width + clampedX];
 
         // Bottom padding
-        int bottomY = min(clampedY + blockDim.y, height - 1);
+        int bottomY = min(y + blockDim.y, height - 1); // Clamp to the bottom edge
         sharedMem[(sharedY + blockDim.y) * sharedWidth + sharedX] = inputImage[bottomY * width + clampedX];
+    }
+
+    // Handle corner cases (optional, but ensures correctness for large padding)
+    if (threadIdx.x < padSize && threadIdx.y < padSize) {
+        // Top-left corner
+        sharedMem[threadIdx.y * sharedWidth + threadIdx.x] = inputImage[max(y - padSize, 0) * width + max(x - padSize, 0)];
+        // Top-right corner
+        sharedMem[threadIdx.y * sharedWidth + sharedX + blockDim.x] = inputImage[max(y - padSize, 0) * width + min(x + blockDim.x, width - 1)];
+        // Bottom-left corner
+        sharedMem[(sharedY + blockDim.y) * sharedWidth + threadIdx.x] = inputImage[min(y + blockDim.y, height - 1) * width + max(x - padSize, 0)];
+        // Bottom-right corner
+        sharedMem[(sharedY + blockDim.y) * sharedWidth + sharedX + blockDim.x] = inputImage[min(y + blockDim.y, height - 1) * width + min(x + blockDim.x, width - 1)];
     }
 
     __syncthreads();
 
     // Apply the median filter
     if (x < width && y < height) {
-        unsigned char window[FILTER_SIZE * FILTER_SIZE];
+        // unsigned char window[FILTER_SIZE * FILTER_SIZE];
+        unsigned char window[1024];
 
         // Collect the filter window from shared memory
         for (int ky = -padSize; ky <= padSize; ky++) {
@@ -134,7 +180,9 @@ __global__ void medianFilterKernel(const unsigned char* inputImage, unsigned cha
 }
 
 
-void applyMedianFilterCUDA(const cv::Mat& inputImage, cv::Mat& outputImage, int filterSize) {
+
+
+void gray_median_filter_cuda(const cv::Mat& inputImage, cv::Mat& outputImage, int filterSize) {
     const int width = inputImage.cols;
     const int height = inputImage.rows;
     const int imageSize = width * height;
@@ -159,36 +207,3 @@ void applyMedianFilterCUDA(const cv::Mat& inputImage, cv::Mat& outputImage, int 
     cudaFree(d_outputImage);
 }
 
-int main(int argc, char* argv[]) {
-    if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " <input_image> <output_image>" << std::endl;
-        return -1;
-    }
-
-    std::string inputFilename = argv[1];
-    std::string outputFilename = argv[2];
-
-    cv::Mat inputImage = cv::imread(inputFilename, cv::IMREAD_GRAYSCALE);
-    if (inputImage.empty()) {
-        std::cerr << "Error: Could not read input image." << std::endl;
-        return -1;
-    }
-    std::cout << "input image:" << std::endl;
-    print_gray_pixel_value(inputImage);
-
-    cv::Mat outputImage(inputImage.size(), inputImage.type());
-
-    applyMedianFilterCUDA(inputImage, outputImage, FILTER_SIZE);
-
-    if (!cv::imwrite(outputFilename, outputImage)) {
-        std::cerr << "Error: Could not save output image." << std::endl;
-        return -1;
-    }
-
-    std::cout << "output image:" << std::endl;
-    print_gray_pixel_value(outputImage);
-
-    std::cout << "Output image saved to " << outputFilename << std::endl;
-
-    return 0;
-}
