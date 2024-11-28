@@ -44,16 +44,16 @@ int main(int argc, char const *argv[])
     // timing
     auto start = std::chrono::high_resolution_clock::now();
     auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
     // ==================== CPU ====================
     start = std::chrono::high_resolution_clock::now();
     cv::Mat cpu_image = gray_median_filter(lrgimage, TEST_FILTER_SIZE);
     end = std::chrono::high_resolution_clock::now();
     
-    duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     auto cpu_time = duration.count();
-    std::cout << "median filter on cpu: " << duration.count() << "\tus" << std::endl;
+    std::cout << "median filter on cpu: " << duration.count() << "\tms" << std::endl;
     
     if (PRINT_LARGE_IMAGE) {
         std::cout << "CPU output:" << std::endl;
@@ -67,9 +67,9 @@ int main(int argc, char const *argv[])
     gray_median_filter_cuda(lrgimage, cuda_image, TEST_FILTER_SIZE);
     end = std::chrono::high_resolution_clock::now();
     
-    duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     auto cuda_time = duration.count();
-    std::cout << "median filter on cuda: " << duration.count() << "\tus" << std::endl;
+    std::cout << "median filter on cuda: " << duration.count() << "\tms" << std::endl;
     
     if(PRINT_LARGE_IMAGE) {
         std::cout << "CUDA output:" << std::endl;
