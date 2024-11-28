@@ -57,6 +57,10 @@ compile the code
 
 ## using the filter
 
+### original image
+
+![image](doc/image.png)
+
 ### gray with filter size 3 -> gray3.png
 
 ```console
