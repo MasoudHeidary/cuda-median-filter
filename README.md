@@ -46,8 +46,9 @@ speed up: 185x
 
 ### compile
 
-compile the code
-run all the commands on the main directory
+*## run all the commands on the main directory*      
+compile the code       
+
 
 
 ```console
